@@ -624,6 +624,74 @@
 // IMPL BLOCKS
 // --------------------------------------------------------------------------
 
+// //--- 1. Define a Trait for Financial Behavior ---
+// // A Trait defines a set of methods that a type must implement.
+// // This is essential for polymorphism and defining common behaviors
+// // across different financial instruments (e.g., stocks, bonds, crypto).
+// pub trait FinancialCalculations {
+//     // Required method: calculate the total market value of the asset.
+//     fn calculate_market_value(&self) -> f64;
+// }
+
+// // --- 2. Define a Struct for a Stock Asset ---
+// // A struct holds the data (state) for our stock asset.
+// #[derive(Debug)] // Allows for easy printing/debugging of the struct
+// pub struct StockAsset {
+//     ticker: String,
+//     shares_held: u64,
+//     current_price: f64,
+// }
+
+// // --- 3. Impl Block (Implementation Block) for the StockAsset Struct ---
+// // An 'impl' block is where you define the *methods* and *associated functions*
+// // (like a constructor) that belong to the StockAsset type.
+// impl StockAsset {
+//     pub fn new(ticker: &str, shares: u64, price: f64) -> Self {
+//         StockAsset {
+//             // .to_string() converts a string slice (&str) to an owned String
+//             ticker: ticker.to_string(),
+//             shares_held: shares,
+//             current_price: price,
+//         }
+//     }
+
+//     // A regular method (takes &self) to retrieve the asset's ticker
+//     pub fn get_ticker(&self) -> &str {
+//         &self.ticker
+//     }
+// }
+
+// // -- 4. Impl Block to Implement the Trait for StockAsset ---
+// // This 'impl' block connects the StockAsset struct to the FinancialCalculations trait,
+// // forcing it to implement the required 'calculate_market_value' method.
+// impl FinancialCalculations for StockAsset {
+//     fn calculate_market_value(&self) -> f64 {
+//         // Rust automatically handles the multiplication of different numeric types
+//         // The result is an f64 (floating-point number)
+//         (self.shares_held as f64) * self.current_price
+//     }
+// }
+
+// // --- 5. Main function to use the code ---
+// fn main() {
+//     // Use the 'new' associated function defined in the 'impl StockAsset' block
+//     let my_stock = StockAsset::new("GOOGL", 150, 145.50);
+
+//     println!("Asset Details: {:?}", my_stock);
+//     println!(
+//         "Asset Ticker (using a custom impl method): {}",
+//         my_stock.get_ticker()
+//     );
+
+//     // Call the method defined in the 'impl FinancialCalculations for StockAsset' block
+//     let value = my_stock.calculate_market_value();
+
+//     // The ':.2' formats the floatig-point number to two decimal places (currency standard)
+//     println!("Total Market Value (Using Trait method): ${:.2}", value);
+
+//     assert_eq!(value, 21825.00); // Simple test to verify the calculation
+// }
+
 // --------------------------------------------------------------------------
 // --- DATA STRUCTURES ---
 // --------------------------------------------------------------------------
@@ -1525,6 +1593,172 @@
 
 //     // Try to process one more time when the queue is empty
 //     transaction_processor.process_next_request();
+// }
+
+// --------------------------------------------------------------------------
+// OWNSERSHIP SYSTEM
+// --------------------------------------------------------------------------
+
+// --------------------------------------------------------------------------
+// OWNSERSHIP RULES & MEMORY SAFETY
+// --------------------------------------------------------------------------
+
+// // 1. Define a Struct to represent a transaction
+// struct FinancialTransaction {
+//     id: u32,
+//     amount: f64,
+//     // A large vector representing a detailed audit trail or receipt data.
+//     // This is here to demonstrate the *cost* of copying, which rust avoids.
+//     audit_data: Vec<u8>,
+// }
+
+// impl FinancialTransaction {
+//     // A constructor method
+//     fn new(id: u32, amount: f64, data_size: usize) -> Self {
+//         FinancialTransaction {
+//             id,
+//             amount,
+//             // Initialize a large vector (e.g., a 1MB receipt)
+//             audit_data: vec![0; data_size],
+//         }
+//     }
+
+//     // 2. Borrowing: A function that only needs to *read* the transaction.
+//     // Note the '&self' (inmmutable borrow). This does NOT take  ownership.
+//     // The transaction remains available after this call.
+//     fn get_summary(&self) -> String {
+//         format!("Transaction ID: {}, Amount: {:.2 }", self.id, self.amount)
+//     }
+
+//     // 3. Mutable Borrowing: A function that needs to *change* the transaction.
+//     // Note the '&mut self' (mutable borrow). Only ONE mutable borrow can exist at a time.
+//     fn apply_fee(&mut self, fee: f64) {
+//         // This is safe because the compier ensures no other part of the code
+//         // can read or write to 'self' while this method is running.
+//         self.amount -= fee;
+//         println!(
+//             "\n[INFO] Applied fee of ${:.2} to transaction {}",
+//             fee, self.id
+//         );
+//     }
+// }
+
+// // 4. Ownership Transfer (Moving): A function that logically consumes the transaction.
+// // Note the 'transaction: FinancialTransaction' (takes ownership).
+// // The 'transaction' is moved into this function and is 'dropped' (memory freed)
+// // when the function returns. The original variable is invalidated.
+// fn finalize_and_archive(transaction: FinancialTransaction) {
+//     println!(
+//         "\n[INFO] Archiving transaction {} with data size {} bytes...",
+//         transaction.id,
+//         transaction.audit_data.len()
+//     );
+//     // The transaction and its large 'audit_data' vector are dropped here.
+//     // The memory is safety released.
+// }
+
+// fn main() {
+//     // --- PART 1: Immutable Borrowing ----
+//     let mut tx1 = FinancialTransaction::new(1001, 150.75, 1024 * 1024); // 1MB data
+
+//     println!("--- Initial State ---");
+//     println!("TX1 Summary: {}", tx1.get_summary()); // (2) Borrowed, not moved.
+
+//     // --- PART 2: Mutable Borrowing ---
+//     // We can change the transaction because we created it as `mut`
+//     tx1.apply_fee(5.00); // (3) Borrowed mutably.
+//     println!("TX1 New Summary: {}", tx1.get_summary()); // (2) Borrowed immutably again.
+
+//     // RUST SAFETY CHECK: The following would cause a compiler error!
+//     /*
+//     let summary = tx1.get_summary(); // Immutable borrow starts here
+//     tx1.apply_fee(1.00);            // ERROR: Cannot borrow mutably while immutably borrowed!
+//     println!("{}", summary);
+//     */
+//     // Rust ensures that data cannot be read while it is being written to (Data Race prevention).
+
+//     // --- PART 3: Ownership Transfer (Moving) ---
+
+//     // `tx1` (and its large audit_data) is moved into the function.
+//     // This avoids an expensive copy of the 1MB data and guarantees
+//     // that no other code can use the transaction later.
+//     finalize_and_archive(tx1); // (4) Ownership MOVED.
+
+//     // RUST SAFETY CHECK: The following would cause a compiler error!
+//     /*
+//     println!("Attempting to access TX1 again: {}", tx1.get_summary());
+//     */
+//     // ERROR: value borrowed here after move! The compiler prevents a use-after-free error.
+
+//     println!("\n[SUCCESS] Rust has guaranteed memory safety and data integrity.");
+// }
+
+// --------------------------------------------------------------------------
+// BORROWING, REFERENCES AND SLICES
+// --------------------------------------------------------------------------
+
+// // 1. Function demonstrating Borrowing and Slices
+// // The function takes a reference to a slice of f64 (&[f64]),
+// // meaning it BORROWS the data without taking ownership.
+// // The slice allows us to process only a part of the original vector.
+// fn calculate_interest_payment(transactions: &[f64], rate: f64) -> f64 {
+//     println!("--- Calculating Interest ---");
+
+//     // 'transactions' is a slice (a type of reference) pointing to a contiguous block of memory.
+//     // We iterate over the slice, borrowing each transaction value.
+//     let total_principal: f64 = transactions
+//         .iter()
+//         // Here, 't' isa reference to an f64 (&f64). The '*' dereferences it
+//         // to get the actual f4 value for the sum.
+//         .map(|&t| t)
+//         .sum();
+
+//     let interest = total_principal * rate;
+
+//     println!("Total Principal from slice: ${:.2}", total_principal);
+//     println!("Interest Rate: {:.2}%", rate * 100.0);
+//     println!("Calculated Interest Payment: ${:.2}", interest);
+
+//     interest
+// }
+
+// // 2. Main function demonstrating References
+// fn main() {
+//     // A vector representing a series of financial transactions (deposits/withdrawals)
+//     let all_transactions: Vec<f64> = vec![
+//         150.00,  // Transaction 1
+//         -25.50,  // Transaction 2
+//         450.75,  // Transaction 3 (High Value)
+//         -100.00, // Transaction 4
+//         250.00,  // Transaction 5
+//     ];
+
+//     // --- References and Borrowing ---
+//     // The main variable 'all_transactions' RETAINS ownership.
+//     let transactions_ref: &Vec<f64> = &all_transactions;
+
+//     println!("Orinal Vector (Owner): {:?}", all_transactions);
+//     println!("Reference to Vector: {:?}", transactions_ref); // Printing via the reference
+
+//     // --- Slices ---
+
+//     // Case A: Calculate interest on ALL transactions.
+//     // We pass a reference to the whole vector as a slice (&all_transactions[..])
+//     let all_interest = calculate_interest_payment(&all_transactions[..], 0.05); // %5 rate
+
+//     // Case B: Calculate interest ONLY on the first three transactions (index 0, 1, 2).
+//     // This creates a SLICE (&all_transactions[0..3 ]) that BORROWS a part of the vector.
+//     let partial_interest = calculate_interest_payment(&all_transactions[0..3], 0.03); // %3 rate
+
+//     // The original vector 'all_transactions' is still perfectly valid and usable
+//     // because the functions only BORROWED the data (did not take ownership).
+//     println!("\nFinal Summary:");
+//     println!("Total interest from ALL transactions: ${:.2}", all_interest);
+//     println!(
+//         "Total interest from PARTIAL transactions: ${:.2}",
+//         partial_interest
+//     );
+//     println!("Original vector is still intact: {:?}", all_transactions);
 // }
 
 // --------------------------------------------------------------------------

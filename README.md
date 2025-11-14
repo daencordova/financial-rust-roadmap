@@ -10,7 +10,7 @@ Welcome to my Rust learning repository! This is where I document my journey from
 
 | Part | Progress | Status |
 |-------|----------|--------|
-| 🎯 Part 1: Fundamentals | 30% | 🚧 Started |
+| 🎯 Part 1: Fundamentals | 32% | 🚧 Started |
 
 ---
 
@@ -67,4 +67,5 @@ financial-rust-roadmap/
    ```bash
    git clone https://github.com/daencordova/financial-rust-roadmap.git
    cd financial-rust-roadmap
+   cargo build && cargo run
    ```
