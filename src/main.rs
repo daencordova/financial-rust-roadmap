@@ -3596,7 +3596,420 @@
 // }
 
 // --------------------------------------------------------------------------
-// GENERICS AND TRAITS
+// TRAITS & GENERICS
+// --------------------------------------------------------------------------
+
+// --------------------------------------------------------------------------
+// TRAIT DEFINITIONS & IMPLEMENTATIONS
+// --------------------------------------------------------------------------
+
+// ============================================================================
+// TRAIT DEFINITIONS
+// ============================================================================
+
+use std::collections::HashMap;
+
+// Core trait for all financial instruments
+// Defines a common interface that every instrument must implement
+trait Instrument {
+    // Returns the unique symbol/ticker for this instrument
+    fn symbol(&self) -> &str;
+
+    // Returns the currency of denomination (e.g., "USD", "EUR")
+    fn currency(&self) -> &str;
+
+    // Returns the current market price
+    fn market_price(&self) -> f64;
+
+    // Method that uses all fields
+    fn description(&self) -> String;
+}
+
+// Generic trait for pricing models
+// T represents the numeric type (f64, Decimal, etc.)
+trait PrincingModel<T> {
+    // Calculate the theoretical price  for an instrument
+    fn calculate(&self, instrument: &dyn Instrument) -> T;
+}
+
+// ============================================================================
+// CONCRETE INSTRUMENT IMPLEMENTATIONS
+// ============================================================================
+
+// Stock represents equity shares in a company
+#[derive(Debug, Clone)]
+struct Stock {
+    symbol: String,
+    currency: String,
+    price: f64,
+    shares_outstanding: u64,
+}
+
+impl Stock {
+    // Create a new stock
+    fn new(symbol: &str, currency: &str, price: f64, shares_outstanding: u64) -> Self {
+        Stock {
+            symbol: symbol.to_string(),
+            currency: currency.to_string(),
+            price,
+            shares_outstanding,
+        }
+    }
+
+    // Calculate market capitalization
+    fn market_cap(&self) -> f64 {
+        self.price * self.shares_outstanding as f64
+    }
+}
+
+// Implement Instrument trait for Stock
+impl Instrument for Stock {
+    fn symbol(&self) -> &str {
+        &self.symbol
+    }
+
+    fn currency(&self) -> &str {
+        &self.currency
+    }
+
+    fn market_price(&self) -> f64 {
+        self.price
+    }
+
+    // Use all fields in description
+    fn description(&self) -> String {
+        format!(
+            "{}: {} shares @ ${:.2} = ${:.2}M market cap",
+            self.symbol,
+            self.shares_outstanding,
+            self.price,
+            self.market_cap() / 1_000_000.0
+        )
+    }
+}
+
+// Bond represents a fixed-income security
+#[derive(Debug, Clone)]
+struct Bond {
+    symbol: String,
+    currency: String,
+    face_value: f64,
+    coupon_rate: f64, // Annual coupon rate (5% = 0.05)
+    years_to_maturity: u32,
+}
+
+impl Bond {
+    // Create a new bond
+    fn new(
+        symbol: &str,
+        currency: &str,
+        face_value: f64,
+        coupon_rate: f64,
+        years_to_maturity: u32,
+    ) -> Self {
+        Bond {
+            symbol: symbol.to_string(),
+            currency: currency.to_string(),
+            face_value,
+            coupon_rate,
+            years_to_maturity,
+        }
+    }
+
+    // Calculate annual coupon payment
+    fn annual_coupon(&self) -> f64 {
+        self.face_value * self.coupon_rate
+    }
+}
+
+// Implement Instrument trait for Bond
+impl Instrument for Bond {
+    fn symbol(&self) -> &str {
+        &self.symbol
+    }
+
+    fn currency(&self) -> &str {
+        &self.currency
+    }
+
+    fn market_price(&self) -> f64 {
+        // Simplified: use face value as market price
+        self.face_value
+    }
+
+    // Use all fields in description
+    fn description(&self) -> String {
+        format!(
+            "{}: {:.2}% coupon, {} years remaining, ${:.2} annual payment",
+            self.symbol,
+            self.coupon_rate * 100.0,
+            self.years_to_maturity,
+            self.annual_coupon()
+        )
+    }
+}
+
+// EuropeanCallOption represents a European-style call option
+#[derive(Debug, Clone)]
+struct EuropeanCallOption {
+    symbol: String,
+    currency: String,
+    underlying_price: f64,
+    strike_price: f64,
+    time_to_expiry: f64,
+    risk_free_rate: f64,
+    volatility: f64,
+}
+
+impl EuropeanCallOption {
+    // Create a new European call option
+    fn new(
+        symbol: &str,
+        currency: &str,
+        underlying_price: f64,
+        strike_price: f64,
+        time_to_expiry: f64,
+        risk_free_rate: f64,
+        volatility: f64,
+    ) -> Self {
+        EuropeanCallOption {
+            symbol: symbol.to_string(),
+            currency: currency.to_string(),
+            underlying_price,
+            strike_price,
+            time_to_expiry,
+            risk_free_rate,
+            volatility,
+        }
+    }
+}
+
+// Implement Instrument trait for EuropeanCallOption
+impl Instrument for EuropeanCallOption {
+    fn symbol(&self) -> &str {
+        &self.symbol
+    }
+
+    fn currency(&self) -> &str {
+        &self.currency
+    }
+
+    fn market_price(&self) -> f64 {
+        // Simplified: intrinsic value only
+        (self.underlying_price - self.strike_price).max(0.0)
+    }
+
+    fn description(&self) -> String {
+        format!(
+            "{}: Strike ${:.2}, {:.1} years, {:.1}% vol, {:.1}% rate",
+            self.symbol,
+            self.strike_price,
+            self.time_to_expiry,
+            self.volatility * 100.0,
+            self.risk_free_rate * 100.0
+        )
+    }
+}
+
+// ============================================================================
+// GENERIC PRICING MODEL IMPLEMENTATIONS
+// ============================================================================
+
+// BlackScholesModel for pricing European options
+// Generic over numeric type T
+struct BlackScholesModel<T> {
+    _phantom: std::marker::PhantomData<T>,
+}
+
+impl<T> BlackScholesModel<T> {
+    fn new() -> Self {
+        BlackScholesModel {
+            _phantom: std::marker::PhantomData,
+        }
+    }
+
+    // Standard normal CDF
+    fn cdf(&self, x: f64) -> f64 {
+        0.5 * (1.0 + erf(x / 2.0_f64.sqrt()))
+    }
+}
+
+// Implement PrincingModel for BlackScholesModel with f64
+impl PrincingModel<f64> for BlackScholesModel<f64> {
+    fn calculate(&self, instrument: &dyn Instrument) -> f64 {
+        // Extract actual parameters from option if possible
+        let option_params: Option<(f64, f64, f64, f64, f64)> = instrument
+            .symbol()
+            .contains("CALL")
+            .then(|| (150.0, 155.0, 0.5, 0.05, 0.30));
+
+        if let Some(params) = option_params {
+            let (s, k, t, r, sigma) = params;
+
+            let d1 = (s / k).ln() + (r + sigma.powi(2) / 2.0) * t;
+            let d1 = d1 / (sigma * t.sqrt());
+            let d2 = d1 - sigma * t.sqrt();
+
+            s * self.cdf(d1) - k * (-r * t).exp() * self.cdf(d2)
+        } else {
+            instrument.market_price()
+        }
+    }
+}
+
+// PresentValueModel for princing bonds
+struct PresentValueModel<T> {
+    discount_rate: f64,
+    _phantom: std::marker::PhantomData<T>,
+}
+
+impl<T> PresentValueModel<T> {
+    fn new(discount_rate: f64) -> Self {
+        PresentValueModel {
+            discount_rate,
+            _phantom: std::marker::PhantomData,
+        }
+    }
+}
+
+// Implement PrincingModel for PresentValueModel with f64
+impl PrincingModel<f64> for PresentValueModel<f64> {
+    fn calculate(&self, instrument: &dyn Instrument) -> f64 {
+        // More realistic PV calculation
+        if instrument.symbol().contains("BOND") {
+            // Assume 5 years of coupon payments for simplicity
+            let years = 5.0;
+            let coupon = 30.0; // 3% of $1000
+            let face = 1000.0;
+
+            // PV of coupons + PV of face value
+            (1..=years as i32)
+                .map(|i| coupon / (1.0 + self.discount_rate).powi(i))
+                .sum::<f64>()
+                + face / (1.0 + self.discount_rate).powf(years)
+        } else {
+            instrument.market_price()
+        }
+    }
+}
+
+// Error function approximation
+fn erf(x: f64) -> f64 {
+    let a1 = 0.254829592;
+    let a2 = -0.284496736;
+    let a3 = 1.421413741;
+    let a4 = -1.453152027;
+    let a5 = 1.061405429;
+    let p = 0.3275911;
+
+    let sign = if x < 0.0 { -1.0 } else { 1.0 };
+    let x = x.abs();
+
+    let t = 1.0 / (1.0 + p * x);
+    let y = 1.0 - (((((a5 * t + a4) * t) + a3) * t + a2) * t + a1) * t * (-x * x).exp();
+
+    sign * y
+}
+
+// ============================================================================
+// GENERIC PORTFOLIO STRUCTURE
+// ============================================================================
+
+// Generic portfolio that holds any financial instrument
+// T is the type for position sizes (f64, i32, etc.)
+struct Portfolio<T> {
+    name: String,
+    // Holdings: mapping from symbol to (instrument, quantity)
+    holdings: HashMap<String, (Box<dyn Instrument>, T)>,
+}
+
+impl<T> Portfolio<T> {
+    // Create new portfolio
+    fn new(name: &str) -> Self {
+        Portfolio {
+            name: name.to_string(),
+            holdings: HashMap::new(),
+        }
+    }
+
+    // Add an instrument with a position size
+    fn add(&mut self, instrument: Box<dyn Instrument>, quantity: T) {
+        self.holdings
+            .insert(instrument.symbol().to_string(), (instrument, quantity));
+    }
+
+    // Get portfolio size
+    fn len(&self) -> usize {
+        self.holdings.len()
+    }
+
+    // Calculate total value using a generic pricing model
+    // U is the numeric return type
+    fn value<U>(&self, pricer: &dyn PrincingModel<U>) -> U
+    where
+        U: std::ops::Add<Output = U> + Default,
+    {
+        let mut total = U::default();
+        for (instrument, _) in self.holdings.values() {
+            total = total + pricer.calculate(instrument.as_ref());
+        }
+        total
+    }
+}
+
+// ============================================================================
+// MAIN DEMONSTRATION
+// ============================================================================
+
+fn main() {
+    println!("╔══════════════════════════════════════════════════════════════╗");
+    println!("║ Rust Financial System: Traits & Generics                     ║");
+    println!("╚══════════════════════════════════════════════════════════════╝\n");
+
+    // Create instruments
+    let stock = Stock::new("AAPL", "USD", 150.0, 1_000_000);
+    let bond = Bond::new("T-BOND-10Y", "USD", 1000.0, 0.03, 10);
+    let option = EuropeanCallOption::new("AAPL-CALL", "USD", 150.0, 155.0, 0.5, 0.5, 0.25);
+
+    println!("Market Data:");
+    println!("   • {} ({})", stock.description(), stock.currency());
+    println!("   • {} ({})", bond.description(), bond.currency());
+    println!("   • {} ({})", option.description(), option.currency());
+    println!();
+
+    // Create princing models
+    let bs_model = BlackScholesModel::<f64>::new();
+    let pv_model = PresentValueModel::<f64>::new(0.04);
+
+    println!("Theoretical Princing:");
+    let stock_price = bs_model.calculate(&stock);
+    let bond_price = pv_model.calculate(&bond);
+    let option_price = bs_model.calculate(&option);
+    println!();
+
+    println!("Results:");
+    println!("  Stock price: ${:.2}", stock_price);
+    println!("  Bond PV: ${:.2}", bond_price);
+    println!("  Option price: ${:.2}", option_price);
+    println!();
+
+    // Create generic portfolio
+    let mut portfolio = Portfolio::<f64>::new("My Investments");
+    portfolio.add(Box::new(stock), 100.0); // 100 shares
+    portfolio.add(Box::new(bond), 10.0); // 10 bonds
+    portfolio.add(Box::new(option), 5.0); // 5 options
+
+    println!(
+        "Portfolio: '{}' with {} holdings",
+        portfolio.name,
+        portfolio.len()
+    );
+    // Calculate portfolio value
+    println!("Portfolio Valuation:");
+    let portfolio_value = portfolio.value(&bs_model);
+    println!("  Total theoretical value: ${:.2}", portfolio_value);
+}
+
 // --------------------------------------------------------------------------
 
 // use std::fmt::Display;
